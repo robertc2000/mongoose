@@ -2917,6 +2917,35 @@ void mg_md5_final(mg_md5_ctx *ctx, unsigned char digest[16]) {
 #define MQTT_HAS_PASSWORD 0x40
 #define MQTT_HAS_USER_NAME 0x80
 
+static const struct mqtt_prop_map_t mqtt_prop_map[] = {
+    {MQTT_PROP_PAYLOAD_FORMAT_INDICATOR, MQTT_PROP_TYPE_BYTE},
+    {MQTT_PROP_MESSAGE_EXPIRY_INTERVAL, MQTT_PROP_TYPE_INT},
+    {MQTT_PROP_CONTENT_TYPE, MQTT_PROP_TYPE_STRING},
+    {MQTT_PROP_RESPONSE_TOPIC, MQTT_PROP_TYPE_STRING},
+    {MQTT_PROP_CORRELATION_DATA, MQTT_PROP_TYPE_BINARY_DATA},
+    {MQTT_PROP_SUBSCRIPTION_IDENTIFIER, MQTT_PROP_TYPE_VARIABLE_INT},
+    {MQTT_PROP_SESSION_EXPIRY_INTERVAL, MQTT_PROP_TYPE_INT},
+    {MQTT_PROP_ASSIGNED_CLIENT_IDENTIFIER, MQTT_PROP_TYPE_STRING},
+    {MQTT_PROP_SERVER_KEEP_ALIVE, MQTT_PROP_TYPE_SHORT},
+    {MQTT_PROP_AUTHENTICATION_METHOD, MQTT_PROP_TYPE_STRING},
+    {MQTT_PROP_AUTHENTICATION_DATA, MQTT_PROP_TYPE_BINARY_DATA},
+    {MQTT_PROP_REQUEST_PROBLEM_INFORMATION, MQTT_PROP_TYPE_BYTE},
+    {MQTT_PROP_WILL_DELAY_INTERVAL, MQTT_PROP_TYPE_INT},
+    {MQTT_PROP_REQUEST_RESPONSE_INFORMATION, MQTT_PROP_TYPE_BYTE},
+    {MQTT_PROP_RESPONSE_INFORMATION, MQTT_PROP_TYPE_STRING},
+    {MQTT_PROP_SERVER_REFERENCE, MQTT_PROP_TYPE_STRING},
+    {MQTT_PROP_REASON_STRING, MQTT_PROP_TYPE_STRING},
+    {MQTT_PROP_RECEIVE_MAXIMUM, MQTT_PROP_TYPE_SHORT},
+    {MQTT_PROP_TOPIC_ALIAS_MAXIMUM, MQTT_PROP_TYPE_SHORT},
+    {MQTT_PROP_TOPIC_ALIAS, MQTT_PROP_TYPE_SHORT},
+    {MQTT_PROP_MAXIMUM_QOS, MQTT_PROP_TYPE_BYTE},
+    {MQTT_PROP_RETAIN_AVAILABLE, MQTT_PROP_TYPE_BYTE},
+    {MQTT_PROP_USER_PROPERTY, MQTT_PROP_TYPE_STRING_PAIR},
+    {MQTT_PROP_MAXIMUM_PACKET_SIZE, MQTT_PROP_TYPE_INT},
+    {MQTT_PROP_WILDCARD_SUBSCRIPTION_AVAILABLE, MQTT_PROP_TYPE_BYTE},
+    {MQTT_PROP_SUBSCRIPTION_IDENTIFIER_AVAILABLE, MQTT_PROP_TYPE_BYTE},
+    {MQTT_PROP_SHARED_SUBSCRIPTION_AVAILABLE, MQTT_PROP_TYPE_BYTE}};
+
 void mg_mqtt_send_header(struct mg_connection *c, uint8_t cmd, uint8_t flags,
                          uint32_t len) {
   uint8_t buf[1 + sizeof(len)], *vlen = &buf[1];
@@ -2983,8 +3012,9 @@ static uint32_t decode_variable_length(const char *buf,
 }
 
 static int mqtt_prop_type_by_id(uint8_t prop_id) {
+  uint32_t i;
   size_t num_properties = sizeof(mqtt_prop_map) / sizeof(mqtt_prop_map[0]);
-  for (size_t i = 0; i < num_properties; ++i) {
+  for (i = 0; i < num_properties; ++i) {
     if (mqtt_prop_map[i].id == prop_id) {
       return mqtt_prop_map[i].type;
     }
@@ -2999,7 +3029,9 @@ size of the content's length
 */
 static uint32_t get_properties_length(struct mg_mqtt_prop *props, int count) {
   uint32_t size = 0;
-  for (int i = 0; i < count; i++) {
+  int i;
+
+  for (i = 0; i < count; i++) {
     size++;  // identifier
     switch (mqtt_prop_type_by_id(props[i].id)) {
       case MQTT_PROP_TYPE_STRING_PAIR:
@@ -3045,10 +3077,10 @@ static void mg_send_mqtt_properties(struct mg_connection *c,
   uint32_t total_size = get_properties_length(props, nr_props);
   uint8_t buf_v[4] = {0, 0, 0, 0};
   uint8_t buf[4] = {0, 0, 0, 0};
-  int len = encode_variable_length(buf, (int) total_size);
+  int len = encode_variable_length(buf, (int) total_size), i;
 
   mg_send(c, buf, (size_t) len);
-  for (int i = 0; i < nr_props; i++) {
+  for (i = 0; i < nr_props; i++) {
     mg_send(c, &props[i].id, sizeof(props[i].id));
     switch (mqtt_prop_type_by_id(props[i].id)) {
       case MQTT_PROP_TYPE_STRING_PAIR:
@@ -3088,12 +3120,13 @@ size_t mg_mqtt_next_prop(struct mg_mqtt_message *msg, struct mg_mqtt_prop *prop,
       (unsigned char *) msg->dgram.ptr + msg->props_start + crt_pos;
   size_t new_pos = crt_pos;
   uint32_t bytes_consumed;
+  uint8_t id;
 
   if (crt_pos >= msg->dgram.len ||
       crt_pos >= msg->props_start + msg->props_size)
     return 0;
 
-  uint8_t id = i[0];
+  id = i[0];
   i++, new_pos++;
   prop->id = id;
 
